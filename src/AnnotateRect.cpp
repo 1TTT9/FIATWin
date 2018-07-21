@@ -44,6 +44,10 @@ int fast_orientation_step = 20;
 int position_step = 1;
 int fast_position_step = 20;
 
+int digit_number = 1;
+int digit_number_count = 0;
+
+
 void displayRR(couple &cc, string export_dir = "");
 
 // mouse click
@@ -53,11 +57,11 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 	
 	if (flags == EVENT_FLAG_CTRLKEY)
 	{
-		cout << "pressing CTRL key - position (" << x << ", " << y << ")" << endl;
+		//cout << "pressing CTRL key - position (" << x << ", " << y << ")" << endl;
 	}
 	else if (flags == EVENT_FLAG_SHIFTKEY)
 	{
-		cout << "pressing Shift key - position (" << x << ", " << y << ")" << endl;
+		//cout << "pressing Shift key - position (" << x << ", " << y << ")" << endl;
 	}
 
 	if (event == EVENT_LBUTTONDOWN)
@@ -121,7 +125,7 @@ void displayRR(couple& cc, string export_dir) {
 
 	// display current rectangle
 	if (cc.init) {
-		cout << "Display rectangle " << cc.r.center.x << "," << cc.r.center.y << "," << cc.r.size.width << "," << cc.r.size.height << endl;
+		//cout << "Display rectangle " << cc.r.center.x << "," << cc.r.center.y << "," << cc.r.size.width << "," << cc.r.size.height << endl;
 		RotatedRect rrrr = RotatedRect(cc.r.center + Point2f(cc.border_left, cc.border_top), cc.r.size, cc.r.angle);
 		displayRotatedRectangle(copy_image, rrrr, blue);
 		arrowedLine(copy_image, rrrr.center, rrrr.center + Point2f(100.0 * cos((rrrr.angle - 90) * 3.141516 / 180.0), 100.0 * sin((rrrr.angle - 90) * 3.141516 / 180.0)), Scalar(0, 0, 0));
@@ -144,20 +148,24 @@ void saveRR(couple& cc, string image_path, float factor, char classe, std::ofstr
 		int new_y = (int)(((float)cc.r.center.y - cc.border_top) / factor);
 		int new_w = (int)(((float)cc.r.size.width) / factor);
 		int new_h = (int)(((float)cc.r.size.height) / factor);
-		cout << "Save " << classe << "," << new_x << ":" << new_y << ":" << new_w << ":" << new_h << endl;
+		//cout << "Save " << classe << "," << new_x << ":" << new_y << ":" << new_w << ":" << new_h << endl;
+		LOG(INFO) << "Save " << classe << "," << new_x << ":" << new_y << ":" << new_w << ":" << new_h;
 		*outfile << image_path << "," << classe << "," << new_x << "," << new_y << "," << new_w << "," << new_h << "," << cc.r.angle << endl;
 		outfile->flush();
 		cc.rectangles.push_back(RotatedRect(Point(new_x * factor, new_y * factor), Size(new_w * factor, new_h * factor), cc.r.angle));
 		cc.init = false;
 		displayRR(cc);
 	}
-	else cout << "Rectangle center not initialized" << endl;
+	else 
+		LOG(ERROR) << "Rectangle center not initialized";
 }
 
 //annotation process
-int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangles_file, bool cross, string export_dir)
+int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangles_file, bool cross, string export_dir, int _digit_number)
 {
 	int mode = 0;
+
+	digit_number = _digit_number;
 
 	time_t last_timer;
 	time_t new_timer;
@@ -170,7 +178,6 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 	std::vector<std::vector<std::string> > input;
 	readCSV(csv_file, input);
 	string csv_dir_path = string(csv_file).substr(0, string(csv_file).find_last_of("/\\") + 1);
-	cout << "CSV dir path : " << csv_dir_path << endl;
 	LOG(INFO) << "CSV dir path : " << csv_dir_path;
 
 	// read the init rectangles
@@ -182,7 +189,6 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 	string init_csv_dir_path = "";
 	if (init_rectangles_file != "") {
 		init_csv_dir_path = init_rectangles_file.substr(0, init_rectangles_file.find_last_of("/\\") + 1);
-		cout << "Init CSV dir path : " << init_csv_dir_path << endl;
 		LOG(INFO) << "Init CSV dir path : " << init_csv_dir_path;
 
 		std::vector<std::vector<std::string> > init_rectangles_boxes;
@@ -198,6 +204,31 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 	DIR *dir;
 	dir = opendir(input_dir);
 	string dir_name = string(input_dir).substr(string(input_dir).find_last_of("/\\") + 1);
+	LOG(INFO) << "data dir path : " << dir_name;
+
+	DIR *dp;
+	int numOfImages = 0;
+	struct dirent *ep;
+	dp = opendir(input_dir);
+	if (dp != NULL)
+	{
+		while (ep = readdir(dp))
+		{
+			if (ep->d_namlen <= 4)
+				continue;
+			string _name(ep->d_name);
+			_name = _name.substr(ep->d_namlen - 3, 3);
+			if (_name == "jpg" || _name == "png")
+			{
+				numOfImages++;
+				LOG(INFO) << numOfImages << ":" << _name << "(" << ep->d_namlen;
+			}
+		}
+		(void)closedir(dp);
+	}
+	else
+		LOG(ERROR) << "Couldn't open the directory: " << input_dir;
+	LOG(INFO) << "Number of files: " << numOfImages;
 
 	// ratio = atof(argv[3]);
 	height = ratio * 100.0;
@@ -207,10 +238,8 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 
 	bool isBrokenUp = false;
 	while ((entry = readdir(dir)) != NULL && !isBrokenUp) {
-		printf("Add rectangle on %s\n", entry->d_name);
-		LOG(INFO) << "Add rectangle on " << entry->d_name;
-
 		string image_path = std::string(input_dir) + "/" + std::string(entry->d_name);
+		LOG(INFO) << "Add rectangle on " << entry->d_name << ", path: "<< image_path;
 		// string relative_image_path = dir_name + "/" + std::string(entry->d_name);
 		WorkImage image(image_path);
 		if (image.ok)
@@ -219,7 +248,6 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 			cc.ratio = ratio;
 			cc.name = std::string(entry->d_name);
 			cc.image_factor = image.factor;
-			cout << "Image factor: " << image.factor << endl;
 			LOG(INFO) << "Image factor: " << image.factor;
 			cc.cross = cross;
 			cc.mode = 1;
@@ -240,7 +268,6 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					max_bounding_box = max_bounding_box | rrd.boundingRect();
 					cc.rectangles.push_back(rrd);
 				}
-			cout << "Previously annotated rectangles : " << cc.rectangles.size() << endl;
 			LOG(INFO) << "Previously annotated rectangles : " << cc.rectangles.size();
 			// work with init rectangles
 			int index = -1;
@@ -261,7 +288,6 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					if (!seen)
 						cc.init_rectangles.push_back(rrr);
 				}
-				cout << "Init rectangles : " << cc.init_rectangles.size() << endl;
 				LOG(INFO) << "Init rectangles : " << cc.init_rectangles.size();
 			}
 			//cout << "max bounding box " << max_bounding_box << endl;
@@ -270,7 +296,6 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 			cc.border_right = max(max_bounding_box.x + max_bounding_box.width + 1, image.image.cols) - image.image.cols;
 			cc.border_top = -std::min(max_bounding_box.y - 1, 0);
 			cc.border_bottom = max(max_bounding_box.y + max_bounding_box.height + 1, image.image.rows) - image.image.rows;
-			cout << "Margins : " << cc.border_top << ", " << cc.border_right << ", " << cc.border_bottom << ", " << cc.border_left << endl;
 			LOG(INFO) << "Margins : " << cc.border_top << ", " << cc.border_right << ", " << cc.border_bottom << ", " << cc.border_left;
 
 			displayRR(cc, export_dir);
@@ -288,7 +313,7 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 				new_timer = time(NULL);
 #endif
 				int seconds = difftime(new_timer, last_timer);
-				cout << "Time : " << seconds << endl;
+				//cout << "Time : " << seconds << endl;
 				std::vector<int>::iterator it = times.begin();
 				it = times.insert(it, seconds);
 				times.pop_back();
@@ -296,9 +321,9 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 				int sum = 0;
 				for (int i = 0; i < times.size(); i++) {
 					sum += times[i];
-					cout << times[i] << ",";
+					//cout << times[i] << ",";
 				}
-				cout << endl << "Times : " << sum << endl;
+				//cout << endl << "Times : " << sum << endl;
 				// if( k == '\t') {
 				//   cout << "Arrow keys for " << (cc.mode?"Fast":"Slow") << endl;
 				//   cc.mode = cc.mode?0:1;
@@ -308,13 +333,13 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 				
 				if (k == 32 /*sapcer*/) {
 					//space
-					cout << "Change mode to ";
+					//cout << "Change mode to ";
 					if (mode) {
 						mode = 0;
-						cout << "Position" << endl;
+						//cout << "Position" << endl;
 					}
 					else {
-						cout << "Rotation/Scale" << endl;
+						//cout << "Rotation/Scale" << endl;
 						mode = 1;
 					}
 				} 	
@@ -322,11 +347,11 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					if (cc.init) {
 						if (sum == 0) {
 							width *= fast_scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						else {
 							width *= scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						displayRR(cc);
 					}
@@ -335,11 +360,11 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					if (cc.init) {
 						if (sum == 0) {
 							height *= fast_scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						else {
 							height *= scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						displayRR(cc);
 					}
@@ -349,11 +374,11 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					if (cc.init) {
 						if (sum == 0) {
 							width /= fast_scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						else {
 							width /= scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						displayRR(cc);
 					}
@@ -362,11 +387,11 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					if (cc.init) {
 						if (sum == 0) {
 							height /= fast_scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						else {
 							height /= scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						displayRR(cc);
 					}
@@ -377,12 +402,12 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 						if (sum == 0) {
 							height *= fast_scale_factor;
 							width *= fast_scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						else {
 							height *= scale_factor;
 							width *= scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 
 						displayRR(cc);
@@ -408,12 +433,12 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 						if (sum == 0) {
 							height /= fast_scale_factor;
 							width /= fast_scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 						else {
 							height /= scale_factor;
 							width /= scale_factor;
-							cout << "New size : " << int(width) << "," << int(height) << endl;
+							//cout << "New size : " << int(width) << "," << int(height) << endl;
 						}
 
 						displayRR(cc);
@@ -489,17 +514,19 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					break;
 				}
 				else if (k == 27 /*ESC, next image*/) {
-
 					cout << "ESC" << endl;
+					digit_number_count = 0;
+
+					numOfImages--;
+					LOG(INFO) << "Number of files left: " << numOfImages  << endl;
 					if (cc.init) {
 						cout << "next rectangle " << endl;
 						// next rectangle
 						cc.init = false;
 						displayRR(cc);
-
 					}
-					else  break; // next image
-
+					else  
+						break; // next image
 				}
 				else if (k == 127 || k == 65288 /*erase*/) {
 
@@ -517,6 +544,23 @@ int annotate(char * input_dir, char* csv_file, float ratio, string init_rectangl
 					classe = (char)k;
 					cout << "Class :" << classe << endl;
 					saveRR(cc, image_path, image.factor, classe, &outfile);
+
+					digit_number_count += 1;
+
+					if (digit_number == digit_number_count)
+					{
+						digit_number_count = 0;
+						numOfImages--;
+						LOG(INFO) << "Number of files left: " << numOfImages << endl;
+						if (cc.init) {
+							cout << "next rectangle " << endl;
+							// next rectangle
+							cc.init = false;
+							displayRR(cc);
+						}
+						else
+							break; // next image
+					}
 				}
 			}
 		}

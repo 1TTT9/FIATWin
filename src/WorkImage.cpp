@@ -1,12 +1,15 @@
 #include "stdafx.h"
 #include "WorkImage.h"
 
+#include <glog/logging.h>
+
 WorkImage::WorkImage(std::string path)
 {
 	full_image = imread(path, CV_LOAD_IMAGE_COLOR);   // Read the file
 	if (!full_image.data)                              // Check for invalid input
 	{
-		std::cout << "Could not open or find the image " << path << std::endl;
+		//std::cout << "Could not open or find the image " << path << std::endl;
+		LOG(ERROR) << "Could not open or find the image " << path;
 		ok = false;
 		return;
 	}
